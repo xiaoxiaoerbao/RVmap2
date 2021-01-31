@@ -1,0 +1,109 @@
+---
+title: "Untitled"
+author: "Daxing Xu"
+date: "1/15/2021"
+output: html_document
+---
+
+## **Wilcoxon Test in R**
+
+-   **One-sample Wilcoxon signed rank test**
+
+-   **Wilcoxon rank sum test**
+
+```{r}
+library(tidyverse)
+library(ggpubr)
+library(rstatix)
+library(datarium)
+```
+
+The **one-sample Wilcoxon signed rank test** is a non-parametric alternative to **one-sample t-test** when the data cannot be assumed to be normally distributed. It's used to determine whether the median of the sample is equal to a known standard value (i.e. theoretical value).
+
+The Wilcoxon test needs additional assumptions, however. They are:
+
+1.  The random variable of interest is continuous
+
+2.  The probability distribution of the population is symmetric.
+
+```{r}
+data(mice, package = "datarium")
+head(mice, 3)
+mice %>% get_summary_stats(weight, type = "median_iqr")
+bxp <- ggboxplot(
+  mice$weight, width = 0.5, add = c("mean", "jitter"), 
+  ylab = "Weight (g)", xlab = FALSE
+  )
+bxp
+```
+
+## Assumptions and preliminary tests
+
+The Wilcoxon signed-rank test assumes that the data are distributed symmetrically around the median. This can be checked by visual inspection using histogram and density distribution.
+
+Create a histogram: As we have only 10 individuals in our data, we specify the option `bins = 4` instead of 30 (default).
+
+```{r}
+gghistogram(mice, x = "weight", y = "..density..", 
+            fill = "steelblue",bins = 4, add_density = TRUE)
+```
+
+From the plot above, it can be seen that the `weight` data are approximately symmetrical (you should not expect them to be perfect, particularly when you have smaller numbers of samples in your study). Therefore, we can use the Wilcoxon signed-rank test to analyse our data.
+
+Note that, in the situation where your data is not symmetrically distributed, you could consider performing a **sign test**, instead of running the Wilcoxon signed-rank test.
+
+The sign test does not make the assumption of a symmetrically-shaped distribution. However, it will most likely be less powerful compared to the Wilcoxon test.
+
+### **Computation**
+
+We want to know, whether the median weight of the mice differs from 25g (two-tailed test)?
+
+```{r}
+# test <- mice %>%
+#   wilcox_test(weight ~ 1, mu = 20.3)
+# test$statistic
+# test$p
+# testLess <- mice %>%
+#   wilcox_test(weight ~ 1, mu = 20.3, "less")
+# testLess$statistic
+# testLess$p
+# testGreater <- mice %>%
+#   wilcox_test(weight ~ 1, mu = 20.3, "greater")
+# testGreater$statistic
+# testGreater$p
+
+# group1 <- c(2.5,3.5,2.9,2.1,6.9,2.4,4.9,6.6,2.0,2.0,5.8,7.5)
+# group2 <- c(4.0,5.6,3.2,1.9,9.5,2.3,6.7,6.0,3.5,4.0,8.1,19.9)
+group1 <- c(19,22,16,29,24)
+group2 <- c(20,11,17,12)
+test <- wilcox.test(x=group1, y=group2,exact = F, paired = F, correct = T)
+test$statistic
+test$parameter
+test$p.value
+test$method
+test$data.name
+```
+
+Note that, to compute one-sided wilcoxon test, you can specify the option `alternative`, which possible values can be "greater", "less" or "two.sided".
+
+### **Effect size**
+
+We'll use the R function `wilcox_effsize()` [rstatix]. It requires the `coin` package for computing the Z statistic.
+
+```{r}
+t <- mice %>%  wilcox_effsize(weight ~ 1, mu = 25)
+```
+
+A large effect size is detected, r = 0.89.
+
+## Report
+
+We could report the result as follow:
+
+A Wilcoxon signed-rank test was computed to assess whether the recruited mice median weight was different to the population normal median weight (25g).
+
+The mice weight value were approximately symmetrically distributed, as assessed by a histogram with superimposed density curve.
+
+The measured mice median weight (19.8) was statistically significantly lower than the population median weight 25g (p = 0.002, effect size r = 0.89).
+
+Create a box plot with p-value:

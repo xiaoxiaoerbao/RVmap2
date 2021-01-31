@@ -1,0 +1,216 @@
+---
+title: "QuantileMatrix"
+author: "Daxing Xu"
+date: "12/29/2020"
+output: 
+  html_document: # html_notebook, html_document
+    toc: true
+    toc_float:
+      toc_collapsed: false
+    toc_depth: 3
+    number_sections: true
+    theme: simplex # default, united, cerulean, journal, flatly, darkly, readable, spacelab, united, cosmo, lumen, paper, sandstone, simplex, and yeti
+    highlight: haddock # default, tango, pygments, kate, monochrome, espresso, zenburn, haddock, and breezedark
+    # bibliography: bibliography.json
+---
+
+```{r}
+knitr::opts_chunk$set(eval = T,echo = F,include = T, warning = F,message = F)
+# eval 代码要不要执行
+# echo 代码要不要输出
+# include 图要不要输出
+# warning 警告要不要输出
+# message 默认信息要不要输出(如bins=30)
+library(tidyverse)
+library(RColorBrewer)
+library(ggpubr)
+```
+
+## Random select column
+
+> -   zcat allIndividualTriadsBlockBySubspecies.txt.gz \| cut -f \$(shuf -i 5-6353 \| head -n 100 \| sort \| xargs echo \| tr [:blank:] ',') \> test.txt
+> -   zcat allIndividualTriadsBlockBySubspecies.txt.gz \| cut -f 1,2,3,4 \> test0.txt
+> -   paste test0.txt test.txt \> allIndividualTriadsBlockBySubspecies.sample100Column.txt
+
+## Data import and mutate
+
+```{r}
+table <- read.delim("allIndividualTriadsBlockBySubspecies.sample100Column.txt")
+infoDB <- read.delim("/Users/xudaxing/Documents/deleteriousMutation/002_vmapII_taxaGroup/taxa_InfoDB.txt")
+infoDB <- infoDB %>% select(Taxa,fdBySubContinent) %>% rename(TaxonID=Taxa)
+df <- table %>% 
+  left_join(x=.,y=infoDB, by="TaxonID") %>%  mutate(Type=ifelse(is.na(fdBySubContinent),Group,fdBySubContinent)) %>%
+  filter(Type %in% c("WE_AT","DE_AT","FT_AT","LR_EU","Cultivar")) %>%
+  mutate(ifPseudo=ifelse(Group %in% c("WE_AT","DE_AT","FT_AT"),"pseudo","hexaploid")) %>%
+  select(TaxonID,Group,AdditiveOrDominance,SlightlyOrStrongly,ifPseudo,fdBySubContinent,Type,5:105)
+```
+
+## Function
+
+### Z-score function
+
+```{r}
+## add zscore column
+## note: data.frame can only contain one triad
+mutateZScore <- function(dataFrame, columnName){
+  pseudoSummary_columnName <- dataFrame %>% 
+  dplyr::group_by(ifPseudo, AdditiveOrDominance, SlightlyOrStrongly) %>% 
+  summarise(pseudoMean=mean({{columnName}}),pseudoSD=sd({{columnName}})) %>% 
+  filter(ifPseudo=="pseudo") %>% 
+   ungroup() %>% 
+  select(AdditiveOrDominance:pseudoSD)
+
+  df_columnName <-  dataFrame %>% 
+  # select(TaxonID:Type,{{columnName}}) %>% 
+  left_join(y = pseudoSummary_columnName,by=c("AdditiveOrDominance", "SlightlyOrStrongly")) %>%   mutate(zscore=({{columnName}}-pseudoMean)/pseudoSD)
+  df_columnName
+}
+```
+
+### Quantile function
+
+```{r}
+## 根据ecdf函数和load值,  求出quantile
+evaluateECDF <- function(ecdfColumn, value){
+  res=vector(mode="numeric", length=length(value))
+  for (i in seq_along(ecdfColumn)) {
+    res[i]=ecdfColumn[[i]](value[i])
+  }
+  res
+}
+
+## note: data.frame can only contain one triad
+mutateQuantile <- function(dataFrame, columnName){
+  ecdf_columnName <- dataFrame %>% 
+  filter(ifPseudo=="pseudo") %>% 
+  dplyr::group_by(AdditiveOrDominance, SlightlyOrStrongly) %>%
+  summarise(ecdfFun = list(ecdf=ecdf({{columnName}})))
+  
+  df_columnName <- dataFrame %>% 
+  # select(TaxonID:Type,columnName) %>% 
+  left_join(y = ecdf_columnName,by=c("AdditiveOrDominance", "SlightlyOrStrongly")) %>% 
+  mutate(quantile=evaluateECDF(ecdfFun, {{columnName}}))
+}
+```
+
+### T function
+
+```{r}
+## 根据t.test()计算t
+calculatingT <- function(hexaploidLoad, pseudoLoad){
+  res <- vector(mode = "numeric",length = length(hexaploidLoad))
+  for (i in seq_along(hexaploidLoad)) {
+    res[i] <- t.test(x = pseudoLoad[[i]], mu=hexaploidLoad[[i]])$statistic
+  }
+  res
+}
+calculatingP <- function(hexaploidLoad, pseudoLoad){
+  res <- vector(mode = "numeric",length = length(hexaploidLoad))
+  for (i in seq_along(hexaploidLoad)) {
+    res[i] <- t.test(x = pseudoLoad[[i]], mu=hexaploidLoad[[i]])$p.value
+  }
+  res
+}
+
+mutateT <- function(dataFrame,columnName){
+  pseudo <- dataFrame %>% 
+    filter(ifPseudo=="pseudo") %>% 
+    dplyr::group_by(AdditiveOrDominance, SlightlyOrStrongly) %>% 
+    summarise(pseudo=list({{columnName}}))
+  
+  hexaploid <- dataFrame %>% 
+    filter(ifPseudo=="hexaploid") %>% 
+    dplyr::group_by(AdditiveOrDominance, SlightlyOrStrongly) %>%
+    left_join(y = pseudo, by = c("AdditiveOrDominance","SlightlyOrStrongly")) %>% 
+    dplyr::mutate(t=calculatingT({{columnName}}, pseudo), 
+                  p=calculatingP({{columnName}}, pseudo))
+  hexaploid
+}
+```
+
+### Distribution of Load & z-score & quantile & t
+
+```{r}
+columns <- c("T000072","T001133","T003691","T005781")
+ df_triad_t <- df %>% 
+    select(TaxonID:Type,T000072) %>% 
+    mutateZScore(T000072) %>% 
+    mutateQuantile(T000072) %>% 
+    mutateT(T000072) %>% 
+    mutate(pvalue=ifelse(t>0,-p,p)) %>% 
+    mutate(minusLogP=ifelse(t>0, log10(p), -log10(p))) %>% 
+   select(TaxonID:Type,T000072,zscore,quantile,t,p,pvalue,minusLogP)
+```
+
+
+```{r}
+columns <- c("T000072","T001133","T003691","T005781")
+for (i in columns) {
+
+  ## col: hexaploid and pseudo
+  col <- c("red","#bdbdbd")
+  
+  ## extract triad df and mutate z-score & quantile
+  df_triad <- df %>% 
+  select(TaxonID:Type,all_of(i)) %>% 
+  mutateZScore(.data[[i]]) %>% 
+  mutateQuantile(.data[[i]])
+  
+  # loadZscoreQuantile 
+  loadZscoreQuantile <- c(i, "zscore", "quantile")
+  label <- c("Load","Z-score","Quantile")
+  
+  for (j in seq_along(loadZscoreQuantile)) {
+    
+    q <- ggplot(df_triad, aes(x=.data[[loadZscoreQuantile[j]]], 
+                              fill=ifPseudo, color=ifPseudo))+
+    geom_histogram(position = position_identity(), aes(y=..ndensity..),bins = 50,alpha=0.6)+
+    facet_grid(AdditiveOrDominance~SlightlyOrStrongly)+
+    scale_color_manual(values = col)+
+    scale_fill_manual(values = col)+
+    scale_y_continuous(breaks = seq(0,1,by=0.5))+
+    scale_x_continuous()+
+    # labs(x=label[j],title = i)+
+    # labs(title = i)+
+    # theme_minimal()+
+    theme_classic()+
+    theme(legend.position = "none", legend.title = element_blank(),
+        text = element_text(size = 28),strip.background = element_blank(),
+        axis.title.x = element_blank(),axis.line = element_blank(),
+        panel.border = element_rect(colour = "black",fill = "transparent"))
+    q
+    # qRes[[count]] <- q
+    outFile <- paste("figs/",i,".",label[j],".png",sep = "")
+    ggsave(plot = q, filename = outFile, width = 8, height = 6,dpi = 300)
+  }
+
+  df_triad_t <- df %>% 
+    select(TaxonID:Type,all_of(i)) %>% 
+    mutateT(.data[[i]]) %>% 
+    mutate(pvalue=ifelse(t>0,-p,p)) %>% 
+    mutate(minusLogP=ifelse(t>0, log10(p), -log10(p))) %>% 
+    select(TaxonID:Type,all_of(i),t,p,pvalue,minusLogP)
+  
+  tValue <- c("t","p","pvalue","minusLogP")
+  
+  for (j in seq_along(tValue)) {
+    q <- ggplot(df_triad_t, aes(x=.data[[tValue[j]]],fill=ifPseudo, color=ifPseudo))+
+    geom_histogram(position = position_identity(), aes(y=..ndensity..),bins = 50,alpha=0.6)+
+    facet_grid(AdditiveOrDominance~SlightlyOrStrongly)+
+    scale_color_manual(values = "blue")+
+    scale_fill_manual(values = "blue")+
+    scale_y_continuous(breaks = seq(0,1,by=0.5))+
+    scale_x_continuous()+
+    # labs(x="One sample T",title = i)+
+    # labs(title = i)+
+    # theme_minimal()+
+    theme_classic()+
+    theme(legend.position = "none", legend.title = element_blank(),
+        text = element_text(size = 28),strip.background = element_blank(),
+        axis.title.x = element_blank(),axis.line = element_blank(),
+        panel.border = element_rect(colour = "black",fill = "transparent"))
+    outFile <- paste("figs/",i,".",tValue[j],".oneSampleT",".png",sep = "")
+    ggsave(plot = q, filename = outFile, width = 8, height = 6,dpi = 300)
+  }
+}
+```
