@@ -1,0 +1,155 @@
+---
+title: "PopMeanLoad"
+author: "Daxing Xu"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document: # html_notebook, html_document
+    toc: true
+    toc_float:
+      toc_collapsed: false
+    toc_depth: 3
+    number_sections: true
+    theme: simplex # default, united, cerulean, journal, flatly, darkly, readable, spacelab, united, cosmo, lumen, paper, sandstone, simplex, and yeti
+    highlight: haddock # default, tango, pygments, kate, monochrome, espresso, zenburn, haddock, and breezedark
+    # bibliography: bibliography.json
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval = T,echo = F,include = T, warning = F,message = F)
+# eval 代码要不要执行
+# echo 代码要不要输出
+# include 图要不要输出
+# warning 警告要不要输出
+# message 默认信息要不要输出(如bins=30)
+library(tidyverse)
+library(RColorBrewer)
+library(ggExtra)
+```
+
+# Hexaploid popMeanLoad
+
+## Data import
+
+```{r}
+table<-read.table("hexaploidTriadPopMeanLoadRecombination.txt", header = T)
+abd_Minus_ab_LoadMean<-table$loadAABBDD-table$loadAABB
+abd_Minus_ab_RecombinationMean<-table$recombinationAABBDD-table$recombinationAABB
+table<-mutate(table, "abd_Minus_ab_LoadMean"=abd_Minus_ab_LoadMean, "abd_Minus_ab_RecombinationMean"=abd_Minus_ab_RecombinationMean)
+# table<-filter(table,LoadD!=0)
+table$Group[table$abd_Minus_ab_LoadMean > 0 & table$abd_Minus_ab_RecombinationMean > 0] <- "++"
+table$Group[table$abd_Minus_ab_LoadMean < 0 & table$abd_Minus_ab_RecombinationMean > 0] <- "+-"
+table$Group[table$abd_Minus_ab_LoadMean > 0 & table$abd_Minus_ab_RecombinationMean < 0] <- "-+"
+table$Group[table$abd_Minus_ab_LoadMean < 0 & table$abd_Minus_ab_RecombinationMean < 0] <- "--"
+table$Group[table$abd_Minus_ab_LoadMean == 0 | table$abd_Minus_ab_RecombinationMean == 0] <- "Zero"
+table$GroupforLoad[table$abd_Minus_ab_LoadMean > 0] <- "+"
+table$GroupforLoad[table$abd_Minus_ab_LoadMean < 0] <- "-"
+table$GroupforRecombination[table$abd_Minus_ab_RecombinationMean > 0] <- "+"
+table$GroupforRecombination[table$abd_Minus_ab_RecombinationMean < 0] <- "-"
+# head(table)
+table$Group <- as.factor(table$Group)
+# levels(table$Group)
+# nrow(table)
+# write.csv(table,"table.csv")
+a1 <- nrow(filter(table, Group=="--"))
+a2 <- nrow(filter(table, Group=="-+"))
+a3 <- nrow(filter(table, Group=="+-"))
+a4 <- nrow(filter(table, Group=="++"))
+a5 <- nrow(filter(table, Group=="Zero"))
+a6 <- nrow(filter(table, is.na(Group)))
+suma<-a1+a2+a3+a4
+a1<- round(a1/suma, 3)
+a2<- round(a2/suma, 3)
+a3<- round(a3/suma, 3)
+a4<- round(a4/suma, 3)
+# nrow(table[table$Group=="Zero",])/nrow(table)
+
+# table <- table[sample(nrow(table),1000,replace = F),]
+table <- subset(table,!table$Group == "Zero")
+```
+
+## Plot
+
+```{r}
+colB <- c("#4d4d4d","#9900ff","#ff4d4d","#a6a6a6")
+p<-ggplot(table, aes(x=abd_Minus_ab_RecombinationMean, y=abd_Minus_ab_LoadMean,colour=Group))+
+  geom_point(alpha=0.3)+
+  scale_x_continuous(limits = c(-0.5, 0.5))+
+  scale_y_continuous(limits = c(-2, 2))+
+  # main = bquote("Eq 1:" ~ y[i] == alpha + beta * x[i] + epsilon[i] ~ "or" ~ .(cor2))
+  labs(x=bquote(Delta["D"] ~"recombination rate"), y=bquote(Delta["D"] ~"population mean load"))+
+  geom_abline(slope = 0,color="#bfbfbf",linetype="dashed")+
+  geom_vline(xintercept = 0,color="#bfbfbf",linetype="dashed")+
+  scale_fill_manual(values = colB)+
+  scale_color_manual(values=colB)+
+  annotate(geom="text", x=c(-0.4,-0.4,0.4,0.4), 
+           y=c(-1.8,1.8,-1.8,1.8), label=c(a1,a2,a3,a4),color=colB)+
+  theme(panel.background = element_rect(size = 0.7, colour = 'black',fill = 'white'),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        text = element_text(size = 12),legend.position = 'none')
+q <- ggMarginal(p, groupColour = TRUE, groupFill = TRUE, type="histogram")
+q
+```
+
+# Pseudo popMeanLoad
+
+## Data import
+
+```{r}
+table<-read.table("pseudohexaploidTriadPopMeanLoadRecombination.txt", header = T)
+abd_Minus_ab_LoadMean<-table$loadAABBDD-table$loadAABB
+abd_Minus_ab_RecombinationMean<-table$recombinationAABBDD-table$recombinationAABB
+table<-mutate(table, "abd_Minus_ab_LoadMean"=abd_Minus_ab_LoadMean, "abd_Minus_ab_RecombinationMean"=abd_Minus_ab_RecombinationMean)
+# table<-filter(table,LoadD!=0)
+table$Group[table$abd_Minus_ab_LoadMean > 0 & table$abd_Minus_ab_RecombinationMean > 0] <- "++"
+table$Group[table$abd_Minus_ab_LoadMean < 0 & table$abd_Minus_ab_RecombinationMean > 0] <- "+-"
+table$Group[table$abd_Minus_ab_LoadMean > 0 & table$abd_Minus_ab_RecombinationMean < 0] <- "-+"
+table$Group[table$abd_Minus_ab_LoadMean < 0 & table$abd_Minus_ab_RecombinationMean < 0] <- "--"
+table$Group[table$abd_Minus_ab_LoadMean == 0 | table$abd_Minus_ab_RecombinationMean == 0] <- "Zero"
+table$GroupforLoad[table$abd_Minus_ab_LoadMean > 0] <- "+"
+table$GroupforLoad[table$abd_Minus_ab_LoadMean < 0] <- "-"
+table$GroupforRecombination[table$abd_Minus_ab_RecombinationMean > 0] <- "+"
+table$GroupforRecombination[table$abd_Minus_ab_RecombinationMean < 0] <- "-"
+# head(table)
+table$Group <- as.factor(table$Group)
+# levels(table$Group)
+# nrow(table)
+# write.csv(table,"table.csv")
+a1 <- nrow(filter(table, Group=="--"))
+a2 <- nrow(filter(table, Group=="-+"))
+a3 <- nrow(filter(table, Group=="+-"))
+a4 <- nrow(filter(table, Group=="++"))
+a5 <- nrow(filter(table, Group=="Zero"))
+a6 <- nrow(filter(table, is.na(Group)))
+suma<-a1+a2+a3+a4
+a1<- round(a1/suma, 3)
+a2<- round(a2/suma, 3)
+a3<- round(a3/suma, 3)
+a4<- round(a4/suma, 3)
+# nrow(table[table$Group=="Zero",])/nrow(table)
+
+# table <- table[sample(nrow(table),1000,replace = F),]
+table <- subset(table,!table$Group == "Zero")
+```
+
+## Plot
+
+```{r}
+colB <- c("#4d4d4d","#9900ff","#ff4d4d","#a6a6a6")
+p<-ggplot(table, aes(x=abd_Minus_ab_RecombinationMean, y=abd_Minus_ab_LoadMean,colour=Group))+
+  geom_point(alpha=0.3)+
+  scale_x_continuous(limits = c(-0.5, 0.5))+
+  scale_y_continuous(limits = c(-2, 2))+
+  # main = bquote("Eq 1:" ~ y[i] == alpha + beta * x[i] + epsilon[i] ~ "or" ~ .(cor2))
+  labs(x=bquote(Delta["D"] ~"recombination rate"), y=bquote(Delta["D"] ~"population mean load"))+
+  geom_abline(slope = 0,color="#bfbfbf",linetype="dashed")+
+  geom_vline(xintercept = 0,color="#bfbfbf",linetype="dashed")+
+  scale_fill_manual(values = colB)+
+  scale_color_manual(values=colB)+
+  annotate(geom="text", x=c(-0.4,-0.4,0.4,0.4), 
+           y=c(-1.8,1.8,-1.8,1.8), label=c(a1,a2,a3,a4),color=colB)+
+  theme(panel.background = element_rect(size = 0.7, colour = 'black',fill = 'white'),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        text = element_text(size = 12),legend.position = 'none')
+q <- ggMarginal(p, groupColour = TRUE, groupFill = TRUE, type="histogram")
+q
+```

@@ -1,0 +1,444 @@
+---
+title: "Recombiantion"
+author: "Daxing Xu"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document: # html_notebook, html_document
+    toc: true
+    toc_float:
+      toc_collapsed: false
+    toc_depth: 3
+    number_sections: true
+    theme: simplex # default, united, cerulean, journal, flatly, darkly, readable, spacelab, united, cosmo, lumen, paper, sandstone, simplex, and yeti
+    highlight: haddock # default, tango, pygments, kate, monochrome, espresso, zenburn, haddock, and breezedark
+    # bibliography: bibliography.json
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval = T,echo = F,include = T, warning = F,message = F)
+# eval 代码要不要执行
+# echo 代码要不要输出
+# include 图要不要输出
+# warning 警告要不要输出
+# message 默认信息要不要输出(如bins=30)
+library(tidyverse)
+library(RColorBrewer)
+```
+
+# Triads distribution
+
+## Data import
+
+```{r}
+df <- read.delim("triadPos.txt")
+sub<-substr(df$Chr, 2,2)
+chrom <- substr(df$Chr,1,1)
+df<-mutate(df, "sub"=sub,"Chrom" = chrom)
+# head(df)
+colB <- c('#fd8582','#967bce','#4bcdc6')
+centromere<-data.frame(Chr=c("1A","2A","3A","4A","5A","6A","7A", "1B", "2B","3B","4B","5B","6B","7B","1D","2D","3D","4D","5D","6D","7D"),
+                       x=c(213,343,318,290,252,288,362,241,348,347,312,201,325,299,170,268,240,185,187,215,339), y=rep(0,21))
+```
+
+## Triads distribution along chromosome
+
+```{r}
+p <- ggplot(df,aes(x=Pos/1000000))+
+  geom_histogram(fill="#fc6e6e",color="black")+
+  geom_point(data = centromere, aes(x=x,y=0),color = "blue",size=1.5)+
+  scale_color_manual(values = colB)+
+  scale_y_continuous(breaks = c(0, 100, 200))+
+  # scale_x_continuous(breaks = c(0, 200, 400))+
+  facet_wrap(Chr ~ .,ncol = 3,scales = 'free_x')+
+  xlab("Triad position (Mb)")+ ylab("Triad num")+
+  #thin without legend
+  theme_classic()+
+  theme(legend.position = "none", legend.title = element_blank(),
+        legend.background = element_rect(fill="transparent"),
+        strip.background = element_blank(),
+        axis.line = element_blank(),
+        # axis.title.x = element_blank(),
+       # text = element_text(size = 14),
+        panel.border = element_rect(colour = "black",fill = "transparent"))
+
+p
+# ggsave(plot = p, "~/Documents/temp.png", width = 8, height = 8, dpi = 300)
+```
+
+
+# Triad recombination rate
+
+## Data import
+
+```{r}
+table <- read.delim("triadPos.txt")
+
+## subgenome triads position
+dfA <- table %>% 
+  mutate(sub=str_sub(Chr, 2,3)) %>% 
+  arrange(TriadID,sub) %>% 
+  group_by(TriadID) %>% 
+  slice(n=1) %>% 
+  select(TriadID,Chr,Pos,RecombinationRate)
+
+dfB <- table %>% 
+  mutate(sub=str_sub(Chr, 2,3)) %>% 
+  arrange(TriadID,sub) %>% 
+  group_by(TriadID) %>% 
+  slice(n=2) %>% 
+  select(TriadID,Chr,Pos,RecombinationRate)
+
+dfD <- table %>% 
+  mutate(sub=str_sub(Chr, 2,3)) %>% 
+  arrange(TriadID,sub) %>% 
+  group_by(TriadID) %>% 
+  slice(n=3) %>% 
+  select(TriadID,Chr,Pos,RecombinationRate)
+
+df <- table %>% 
+  left_join(dfA, by = c("TriadID"),suffix=c("", "_TriadsPosA")) %>% 
+  left_join(dfB, by = c("TriadID"),suffix=c("", "_TriadsPosB")) %>% 
+  left_join(dfD, by = c("TriadID"),suffix=c("", "_TriadsPosD")) %>% 
+  mutate(sub=str_sub(Chr,2,2))
+```
+
+## Triads Pos A
+
+```{r}
+df_A <- df %>% 
+  mutate(TriadsPosSubID=str_sub(Chr_TriadsPosA,1,1))
+
+centromere_A <- data.frame(TriadsPosSubID = c("1","2","3","4","5","6","7"),x=c(213,343,318,290,252,288,362),y=rep(0,7))
+centromere_B <- data.frame(TriadsPosSubID = c("1","2","3","4","5","6","7"),x=c(241,348,347,312,201,325,299),y=rep(0,7))
+centromere_D <- data.frame(TriadsPosSubID = c("1","2","3","4","5","6","7"),x=c(170,268,240,185,187,215,339),y=rep(0,7))
+
+p <- ggplot(df_A,aes(x=Pos_TriadsPosA/1000000,y=RecombinationRate,col=sub))+
+  geom_point(size=0.4)+
+  geom_point(data = centromere_A, aes(x=x,y=0),color = "blue",size=1.5)+
+  scale_color_brewer(palette = "Set2")+
+  # scale_x_continuous(breaks = c(0, 200, 400, 600))+
+  facet_wrap(TriadsPosSubID ~ .,nrow = 3,scales = 'free')+
+  xlab("Triad A position (Mb)")+ ylab("Recombination rate")+
+  #thin without legend
+  theme_classic()+
+  theme(legend.position = "none", legend.title = element_blank(),
+        legend.background = element_rect(fill="transparent"),
+        strip.background = element_blank(),
+        axis.line = element_blank(),
+        # axis.title.x = element_blank(),
+       # text = element_text(size = 14),
+        panel.border = element_rect(colour = "black",fill = "transparent"))
+
+p
+
+```
+
+## Tirads pos B
+
+```{r}
+df_B <- df %>% 
+  mutate(TriadsPosSubID=str_sub(Chr_TriadsPosB,1,1))
+
+centromere_A <- data.frame(TriadsPosSubID = c("1","2","3","4","5","6","7"),x=c(213,343,318,290,252,288,362),y=rep(0,7))
+centromere_B <- data.frame(TriadsPosSubID = c("1","2","3","4","5","6","7"),x=c(241,348,347,312,201,325,299),y=rep(0,7))
+centromere_D <- data.frame(TriadsPosSubID = c("1","2","3","4","5","6","7"),x=c(170,268,240,185,187,215,339),y=rep(0,7))
+
+p <- ggplot(df_B,aes(x=Pos_TriadsPosB/1000000,y=RecombinationRate,col=sub))+
+  geom_point(size=0.4)+
+  geom_point(data = centromere_B, aes(x=x,y=0),color = "blue",size=1.5)+
+  scale_color_brewer(palette = "Set2")+
+  # scale_x_continuous(breaks = c(0, 200, 400, 600))+
+  facet_wrap(TriadsPosSubID ~ .,nrow = 3,scales = 'free')+
+  xlab("Triad B position (Mb)")+ ylab("Recombination rate")+
+  #thin without legend
+  theme_classic()+
+  theme(legend.position = "none", legend.title = element_blank(),
+        legend.background = element_rect(fill="transparent"),
+        strip.background = element_blank(),
+        axis.line = element_blank(),
+        # axis.title.x = element_blank(),
+       # text = element_text(size = 14),
+        panel.border = element_rect(colour = "black",fill = "transparent"))
+
+p
+
+```
+
+## Tirads Pos D
+
+```{r}
+df_D <- df %>% 
+  mutate(TriadsPosSubID=str_sub(Chr_TriadsPosD,1,1))
+
+centromere_A <- data.frame(TriadsPosSubID = c("1","2","3","4","5","6","7"),x=c(213,343,318,290,252,288,362),y=rep(0,7))
+centromere_B <- data.frame(TriadsPosSubID = c("1","2","3","4","5","6","7"),x=c(241,348,347,312,201,325,299),y=rep(0,7))
+centromere_D <- data.frame(TriadsPosSubID = c("1","2","3","4","5","6","7"),x=c(170,268,240,185,187,215,339),y=rep(0,7))
+
+p <- ggplot(df_D,aes(x=Pos_TriadsPosD/1000000,y=RecombinationRate,col=sub))+
+  geom_point(size=0.4)+
+  geom_point(data = centromere_D, aes(x=x,y=0),color = "blue",size=1.5)+
+  scale_color_brewer(palette = "Set2")+
+  # scale_x_continuous(breaks = c(0, 200, 400, 600))+
+  facet_wrap(TriadsPosSubID ~ .,nrow = 3,scales = 'free')+
+  xlab("Triad D position (Mb)")+ ylab("Recombination rate")+
+  #thin without legend
+  theme_classic()+
+  theme(legend.position = "none", legend.title = element_blank(),
+        legend.background = element_rect(fill="transparent"),
+        strip.background = element_blank(),
+        axis.line = element_blank(),
+        # axis.title.x = element_blank(),
+       # text = element_text(size = 14),
+        panel.border = element_rect(colour = "black",fill = "transparent"))
+
+p
+```
+
+# Traid recombination rate sliding window
+
+## Data import
+
+```{r}
+dataFile <- c("triadAPosSliding.txt")
+df <- read.table(dataFile, header=TRUE, sep="\t",row.names=NULL)
+sub<-substr(df$Chr, 2,2)
+chrom <- substr(df$Chr,1,1)
+pos<-(df$Start+df$End)/2
+df<-mutate(df, "sub"=sub,"Chrom" = chrom, "Pos"= pos)
+# head(df)
+```
+
+
+## Triads Pos A
+
+```{r}
+centromere_A <- data.frame(Chrom = c("1","2","3","4","5","6","7"),x=c(213,343,318,290,252,288,362),y=rep(0,7))
+centromere_B <- data.frame(Chrom = c("1","2","3","4","5","6","7"),x=c(241,348,347,312,201,325,299),y=rep(0,7))
+centromere_D <- data.frame(Chrom = c("1","2","3","4","5","6","7"),x=c(170,268,240,185,187,215,339),y=rep(0,7))
+
+p <- ggplot(df,aes(x=Pos/1000000,y=Value,col=sub))+
+  # geom_point(size=0.4)+
+  geom_smooth(method = "loess",formula = y~x,span = 0.1,se=F,size=0.8)+
+  geom_point(data = centromere_A, aes(x=x,y=0),color = "blue",size=1.5)+
+  scale_color_brewer(palette = "Set2")+
+  # scale_x_continuous(breaks = c(0, 200, 400, 600))+
+  facet_wrap(Chrom ~ .,nrow = 3,scales = "free_x")+
+  xlab("Triad A position (Mb)")+ ylab("Recombination")+
+  #thin without legend
+  theme_classic()+
+  theme(legend.position = "none", legend.title = element_blank(),
+        legend.background = element_rect(fill="transparent"),
+        strip.background = element_blank(),
+        axis.line = element_blank(),
+        # axis.title.x = element_blank(),
+       # text = element_text(size = 14),
+        panel.border = element_rect(colour = "black",fill = "transparent"))
+
+p
+```
+
+
+## Triads Pos B
+
+```{r}
+dataFile <- c("triadBPosSliding.txt")
+df <- read.table(dataFile, header=TRUE, sep="\t",row.names=NULL)
+sub<-substr(df$Chr, 2,2)
+chrom <- substr(df$Chr,1,1)
+pos<-(df$Start+df$End)/2
+df<-mutate(df, "sub"=sub,"Chrom" = chrom, "Pos"= pos)
+# head(df)
+colB <- c('#fd8582','#967bce','#4bcdc6')
+centromere_A <- data.frame(Chrom = c("1","2","3","4","5","6","7"),x=c(213,343,318,290,252,288,362),y=rep(0,7))
+centromere_B <- data.frame(Chrom = c("1","2","3","4","5","6","7"),x=c(241,348,347,312,201,325,299),y=rep(0,7))
+centromere_D <- data.frame(Chrom = c("1","2","3","4","5","6","7"),x=c(170,268,240,185,187,215,339),y=rep(0,7))
+p <- ggplot(df,aes(x=Pos/1000000,y=Value,col=sub))+
+  # geom_point(size=0.4)+
+  geom_smooth(method = "loess",formula = y~x,span = 0.1,se=F,size=0.8)+
+  geom_point(data = centromere_B, aes(x=x,y=0),color = "blue",size=1.5)+
+  scale_color_brewer(palette = "Set2")+
+  # scale_x_continuous(breaks = c(0, 200, 400, 600))+
+  facet_wrap(Chrom ~ .,nrow = 3,scales = "free_x")+
+  xlab("Triad B position (Mb)")+ ylab("Recombination")+
+  #thin without legend
+  theme_classic()+
+  theme(legend.position = "none", legend.title = element_blank(),
+        legend.background = element_rect(fill="transparent"),
+        strip.background = element_blank(),
+        axis.line = element_blank(),
+        # axis.title.x = element_blank(),
+       # text = element_text(size = 14),
+        panel.border = element_rect(colour = "black",fill = "transparent"))
+
+p
+```
+
+## Triads Pos D
+
+```{r}
+dataFile <- c("triadDPosSliding.txt")
+df <- read.table(dataFile, header=TRUE, sep="\t",row.names=NULL)
+sub<-substr(df$Chr, 2,2)
+chrom <- substr(df$Chr,1,1)
+pos<-(df$Start+df$End)/2
+df<-mutate(df, "sub"=sub,"Chrom" = chrom, "Pos"= pos)
+# head(df)
+colB <- c('#fd8582','#967bce','#4bcdc6')
+centromere_A <- data.frame(Chrom = c("1","2","3","4","5","6","7"),x=c(213,343,318,290,252,288,362),y=rep(0,7))
+centromere_B <- data.frame(Chrom = c("1","2","3","4","5","6","7"),x=c(241,348,347,312,201,325,299),y=rep(0,7))
+centromere_D <- data.frame(Chrom = c("1","2","3","4","5","6","7"),x=c(170,268,240,185,187,215,339),y=rep(0,7))
+p <- ggplot(df,aes(x=Pos/1000000,y=Value,col=sub))+
+  # geom_point(size=0.4)+
+  geom_smooth(method = "loess",formula = y~x,span = 0.1,se=F,size=0.8)+
+  geom_point(data = centromere_D, aes(x=x,y=0),color = "blue",size=1.5)+
+  scale_color_brewer(palette = "Set2")+
+  # scale_x_continuous(breaks = c(0, 200, 400, 600))+
+  facet_wrap(Chrom ~ .,nrow = 3,scales = "free_x")+
+  xlab("Triad D position (Mb)")+ ylab("Recombination")+
+  #thin without legend
+  theme_classic()+
+  theme(legend.position = "none", legend.title = element_blank(),
+        legend.background = element_rect(fill="transparent"),
+        strip.background = element_blank(),
+        axis.line = element_blank(),
+        # axis.title.x = element_blank(),
+       # text = element_text(size = 14),
+        panel.border = element_rect(colour = "black",fill = "transparent"))
+
+p
+```
+
+# Traids recombination rate 7 model
+
+## Data import
+
+```{r}
+table <- read.delim("triadRecombinationRegion.txt")
+df <- table %>% 
+  filter(Region!="M000") %>% 
+  mutate(Region=factor(Region,levels = c("M100","M101","M110","M111","M011","M001","M010")))
+
+colB <- c('#fd8582','#cccdfe','#cdfffc','darkgray','#ffcbcc','#4bcdc6','#967bce')
+# plot(rep(1,8),col=colB,pch=16,cex=8) #查看这几种颜色 
+```
+
+## Ternary plot
+
+```{r}
+library(ggtern)
+p <- ggtern(data = df, aes(x = A, y = B, z = D,col=Region)) +
+  geom_point(alpha = 0.9,size=1)+
+  scale_color_manual(values = colB)+
+  theme_bw() +
+  theme_showarrows() +
+  theme(
+    tern.panel.background = element_blank(),
+    tern.panel.grid.minor = element_line(linetype = 'solid',colour = 'lightgray'),
+    tern.panel.grid.major = element_line(linetype='dotted',colour = 'darkgray'),
+    tern.axis.arrow.L = element_line(colour = '#fd8582'), ## set x
+    tern.axis.arrow.T = element_line(colour = '#967bce'), ## set y
+    tern.axis.arrow.R = element_line(colour = '#4bcdc6'), ## set z
+    legend.position = 'none'
+  )
+p
+```
+
+## Boxplot---relative
+
+```{r}
+triad<- df
+# add sum for each data frame and convert to the contribution format
+# head(triad)
+triad$Sum <- apply(triad[,c(2,3,4)],1,sum,na.rm=T)
+triad$A <- triad$A*100/triad$Sum
+triad$B <- triad$B*100/triad$Sum
+triad$D <- triad$D*100/triad$Sum
+### gather the data frame
+triad_l <- gather(triad,"Sub","RelativeContribution",A,B,D)
+
+## plot balanced first
+triad_b <- subset(triad_l,triad_l$Region=="M111")
+# head(triad_b)
+library(ggplot2)
+p <- ggplot((triad_b),aes(x=Sub, y= RelativeContribution, fill=Sub))+
+  geom_boxplot(position = position_dodge(0.8),outlier.colour = 'black',alpha=0.8)+
+  stat_boxplot(geom = "errorbar",width=0.12,position = position_dodge(0.5))+
+  labs(y="Relative contribution (%)",title = "M111")+
+  scale_fill_brewer(palette = "Set2")+
+  theme_classic()+
+  theme(legend.position = "none", legend.title = element_blank(),
+        legend.background = element_rect(fill="transparent"),
+        plot.title = element_text(hjust = 0.5),
+        strip.background = element_blank(),
+        axis.line = element_blank(),
+        axis.title.x = element_blank(),
+       text = element_text(size = 14),
+        panel.border = element_rect(colour = "black",fill = "transparent"))
+
+p
+
+## 开始画 其他6种模型
+w <- c(which(triad_l$Region == "M111"))
+triadl_nb <- triad_l[-w,]
+# head(triadl_nb)
+# levels(triadl_nb$Region)
+triadl_nb$Region<-factor(triadl_nb$Region, levels(triadl_nb$Region)[c(4,6,7,5,3,2,8,1)])
+
+p <- ggplot(triadl_nb,aes(x=Sub, y=RelativeContribution, fill=Sub))+
+  geom_boxplot(position = position_dodge(0.8),outlier.colour = 'black',alpha=0.8)+
+  stat_boxplot(geom = "errorbar",width=0.12,position = position_dodge(0.5))+
+  facet_wrap(Region ~ .,scales = "free")+
+  scale_y_continuous(limits=c(0,100.2))+
+  labs(y="Relative contribution (%)")+
+  scale_fill_brewer(palette = "Set2")+
+  theme_classic()+
+  theme(legend.position = "none", legend.title = element_blank(),
+        legend.background = element_rect(fill="transparent"),
+        strip.background = element_blank(),
+        axis.line = element_blank(),
+        axis.title.x = element_blank(),
+       text = element_text(size = 14),
+        panel.border = element_rect(colour = "black",fill = "transparent"))
+p
+```
+
+## Boxplot---absolute
+
+### Prepare data
+
+```{r}
+table <- read.delim("triadRecombinationRegion.txt")
+df <- table %>% 
+  filter(Region!="M000") %>% 
+  mutate(Region=factor(Region,levels = c("M100","M101","M110","M111","M011","M001","M010")))
+triad <- df
+triad_l <- gather(triad,"Sub","Absolute",A,B,D)
+
+# levels(triad_l$Region)
+triad_l$Region<-factor(triad_l$Region, levels(triad_l$Region)[c(8,4,6,7,5,3,2,1)])
+# levels(triad_l$Region)
+```
+
+### Plot
+
+```{r}
+p<- ggplot(triad_l,aes(x=Region, y=Absolute, fill=Sub))+
+  geom_boxplot(position = position_dodge(0.8),outlier.colour = 'black',alpha=0.8)+
+  stat_boxplot(geom = "errorbar",width=0.12,position = position_dodge(0.8))+
+  labs(y="Triad recombination rate")+
+  scale_fill_brewer(palette = "Set2")+
+  scale_x_discrete(limits = c("M111","M011","M101","M110","M100","M010","M001"),
+                   labels = c ("M111","M011","M101","M110","M100","M010","M001"))+
+  theme_classic()+
+  theme(legend.position = "none", legend.title = element_blank(),
+        legend.background = element_rect(fill="transparent"),
+        strip.background = element_blank(),
+        axis.line = element_blank(),
+        axis.title.x = element_blank(),
+       # text = element_text(size = 14),
+        panel.border = element_rect(colour = "black",fill = "transparent"))
+
+p
+```
+
+

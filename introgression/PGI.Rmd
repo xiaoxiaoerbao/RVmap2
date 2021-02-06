@@ -1,0 +1,58 @@
+---
+title: "PGI"
+author: "Daxing Xu"
+date: "2/6/2021"
+output: 
+  html_document: # html_notebook, html_document
+    toc: true
+    toc_float:
+      toc_collapsed: false
+    toc_depth: 3
+    number_sections: true
+    theme: simplex # default, united, cerulean, journal, flatly, darkly, readable, spacelab, united, cosmo, lumen, paper, sandstone, simplex, and yeti
+    highlight: haddock # default, tango, pygments, kate, monochrome, espresso, zenburn, haddock, and breezedark
+    # bibliography: bibliography.json
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval = T,echo = F,include = T, warning = F,message = F)
+# eval 代码要不要执行
+# echo 代码要不要输出
+# include 图要不要输出
+# warning 警告要不要输出
+# message 默认信息要不要输出(如bins=30)
+library(tidyverse)
+library(RColorBrewer)
+```
+
+# Data import
+
+```{r}
+tablePGI <- read.delim("PGI100SNPwindow_50Step.BySub.thresh0.5.txt")
+tablePGI$P3 <- factor(tablePGI$P3, levels = c("WE","DE","FT","AT"))
+```
+
+# Plot
+
+```{r}
+colBySubspeciesP3<- c("#ffd702","#7f5701","#016699","#87cef9")
+ggplot(tablePGI, aes(x=Sub, y=PGI, fill=P3))+
+  geom_boxplot()+
+  facet_grid(.~GroupBySubspecies)+
+  scale_fill_manual(values = colBySubspeciesP3)+
+  theme_classic()+
+  theme(legend.position = "none", legend.title = element_blank(),
+        panel.background = element_rect(fill="transparent"),
+        # legend.text = element_text(size = 10),
+        # legend.key.size = unit(1,"cm"),
+        legend.background = element_rect(fill="transparent"),
+        strip.background = element_blank(),
+        axis.title.x = element_blank(),
+        axis.line = element_blank(),
+        text = element_text(size = 14),
+        panel.border = element_rect(colour = "black",fill = "transparent"))
+```
+
